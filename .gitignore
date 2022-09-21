@@ -8,6 +8,14 @@
 Code/Lines saved/
 Исходники калибровок vss-dk-2021/
 
+*.asv
+*.log
+Thumbs.db
+*.exe
+*.log
+*.war
+
+
 
 # Node artifact files
 node_modules/

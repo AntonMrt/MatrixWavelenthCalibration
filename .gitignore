@@ -4,8 +4,9 @@
 #     https://www.atlassian.com/git/tutorials/saving-changes/gitignore
 
 
-TestImages/
+
 Code/Lines saved/
+Исходники калибровок vss-dk-2021/
 
 
 # Node artifact files

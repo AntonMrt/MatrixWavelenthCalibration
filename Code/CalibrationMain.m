@@ -30,12 +30,13 @@ while(isNextImage)
     spectralLine = [];
     % цикл дл€ поиска линии на одном изображении до тех пор, пока не удовлетворит результат
     while (repeatFindingSpectralLine)
-        spectralLine = findSmoothSpectralLine(imgWithoutDark);
+        [spectralLine imageFigHandler] = findSmoothSpectralLine(imgWithoutDark);
 
         prompt = '—охранить спектральную линию? ≈сли да, то введите им€ этой линии, если нет - ничего не вводите (Enter):';
         nameLine = input(prompt,"s");
         if(~isempty(nameLine))
             saveLineToProgramDir(spectralLine, nameLine);
+            saveImageToProgramDir(imageFigHandler,nameLine);
         end
 
         prompt = 'Ќайти еще одну спектральную линию на изображении? y/n [n]:';
@@ -59,7 +60,7 @@ saveCalibrationsToOneFile();
 disp('”ра, калибровка окончена!');
 
 
-function smoothDefinedSpectralLine = findSmoothSpectralLine(img)
+function [smoothDefinedSpectralLine imageFigHandler] = findSmoothSpectralLine(img)
 global peakSEL;
 global peakTHRESH;
 close all;
@@ -72,24 +73,25 @@ if ~isempty(userInput)
 end
 image(img);
 imgOut = img;
-prompt = ' ликните на середину линии поглощени€';
+prompt = ' ликните на середину линии поглощени€ в ключевых точках (≈сли лини€ изогнута€, то вверху, всередине и внизу)';
 disp(prompt);
-[approximWaveChan,y,button] = ginputWhite(1);
+% [approximWaveChan,y,button] = ginputWhite(1);
 
-% centerLinesX = [];
-% centerLinesY = [];
-% [x,y,button] = ginputWhite(1);
-% while (button ~=3)
-%     [x,y,button] = ginputWhite(1);
-%     hold on;
-%     plot (x, y, '+', 'Color', 'cyan');
-%     hold off;
-%     centerLinesX = [centerLinesX, x];
-%     centerLinesY = [centerLinesY, y];
-% end
-% plot(50,100, 'r+', 'MarkerSize', 30, 'LineWidth', 2);
-
-
+centerLinesX = [];
+centerLinesY = [];
+isRightclicked = false;
+while (~isRightclicked)
+    [x,y,button] = ginputWhite(1);
+    if(button == 3)
+        isRightclicked = true;
+    else
+        hold on;
+        plot (x, y, '+', 'Color', 'cyan');
+        hold off;
+        centerLinesX = [centerLinesX, x];
+        centerLinesY = [centerLinesY, y];
+    end
+end
 
 prompt = ' ликнете пиксель, ограничивающий область поиска линии поглощени€ —Ћ≈¬ј ';
 disp(prompt);
@@ -102,21 +104,25 @@ red = img(:,:,1);
 for i=1:length(img)
     rowSpec = double(red(i, :));
     [peakLoc, peakMag] = peakfinder(rowSpec,peakSEL, peakTHRESH, 1, false, false);
-    pair = [];
-    delta = 1e99;
-    for j  = 1:length(peakLoc)
-        peakLocJ = round(peakLoc(j));
-        imgOut(i,peakLocJ,1) = 255;
-        imgOut(i,peakLocJ,2) = 0;
-        imgOut(i,peakLocJ,3) = 0;
-        currentDelta = abs(peakLocJ-approximWaveChan);
-        if(currentDelta < delta && peakLocJ < cordBorderRight && peakLocJ > cordBorderLeft )
-            delta = currentDelta;
-            pair = [i peakLocJ];
-        end
+
+    %отрисовка всех найденных пиков на изображении
+    for j=1:length(peakLoc)
+        imgOut(i, round(peakLoc(j)), 1) = 255;
+        imgOut(i, round(peakLoc(j)), 2) = 0;
+        imgOut(i, round(peakLoc(j)), 3) = 0;
     end
-    redVerticalLine = [redVerticalLine; pair];
-end
+
+    peakX = findCorrectPeak(peakLoc, i, centerLinesX, centerLinesY, cordBorderLeft, cordBorderRight);
+    %отрисовка только корректных пиков на изображении
+    imgOut(i, round(peakX), 1) = 0;
+    imgOut(i, round(peakX), 2) = 180;
+    imgOut(i, round(peakX), 3) = 0;
+    pair = [];
+    if(~isempty(peakX))
+        pair = [i, peakX];
+        redVerticalLine = [redVerticalLine; pair];
+    end
+end    
 lineSmooth = smooth( redVerticalLine(:,1), redVerticalLine(:,2), 0.3,'rloess');
 pixelsAll = 1:1:length(img);
 lineSmoothImgLength = interp1(redVerticalLine(:,1), lineSmooth, pixelsAll, 'spline');
@@ -135,7 +141,7 @@ for i = 1:length(lineSmoothImgLength)
     imgOut(i, uint16(lineSmoothImgLength(i)), 2) = 255;
     imgOut(i, uint16(lineSmoothImgLength(i)), 3) = 0;
 end
-figure;
+imageFigHandler = figure;
 image(imgOut);
 % это магическое заклинание строит вертикальные полосы. ¬ 2022 матлабе уже
 % можно использовать xline
@@ -193,3 +199,47 @@ if exist(nameFile,"file")
     disp(['файл сохранен: ' nameFile])
 end
 
+function saveImageToProgramDir(imageFigHandler, name)
+folder = 'Lines saved';
+if ~exist(folder, 'dir')
+    mkdir(folder)
+end
+nameFile = [folder '\' name '.png'];
+exportgraphics(imageFigHandler,nameFile,'Resolution',600 );
+if exist(nameFile,"file")
+    disp(['файл сохранен: ' nameFile])
+end
+
+
+% функци€ findCorrectPeak принимает список найденных пиков дл€ одной строки и по
+% дополнительным параметрам выбирает наиболее подход€щий из них
+%   peaksVector - массив с координатами (номер их колонки в изображении) пиков
+%   currentRowIndex - номер строки, в которой происходит анализ пиков
+%   anchorPointsX - координаты X выбранных пользователем центров линий
+%   anchorPointsY - координаты Y выбранных пользователем центров линий
+%   cordBorderLeft и cordBorderRight - лева€ и права€ граница по оси X на
+%   изображении внутри которой выбираютс€ пики
+%   return bestPeak - координата (номер столбца изображени€) найденного лучшего пика из списка пиков
+function bestPeak = findCorrectPeak(peaksVector, currentRowIndex, anchorPointsX, anchorPointsY, cordBorderLeft, cordBorderRight)
+bestPeak = [];
+if(isempty(peaksVector) || isempty(anchorPointsX) || isempty(anchorPointsY))
+    return;
+end
+targetSpectralLineX = -1; 
+deltaCurrentYAndUserY = 1e999;
+
+for i = 1:length(anchorPointsY)
+    tempDelta = abs(anchorPointsY(i) - currentRowIndex);
+    if(tempDelta < deltaCurrentYAndUserY)
+        deltaCurrentYAndUserY = tempDelta;
+        targetSpectralLineX = anchorPointsX(i);
+    end
+end
+delta = 1e999;
+for i  = 1:length(peaksVector)
+    tempDelta = abs(peaksVector(i) - targetSpectralLineX);
+    if(tempDelta < delta && peaksVector(i) < cordBorderRight && peaksVector(i) > cordBorderLeft)
+        delta = tempDelta;
+        bestPeak = peaksVector(i);
+    end
+end

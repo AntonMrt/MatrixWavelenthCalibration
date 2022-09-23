@@ -9,14 +9,12 @@
 function Main
 close all
 global isTestVersion;
+isTestVersion = false; % если false, то загружаем прописанные изображения, без интерфейса открытия
 %       sel - The amount above surrounding data for a peak to be,
 %           identified (default = (max(x0)-min(x0))/4). Larger values mean
 %           the algorithm is more selective in finding peaks.
-global peakSEL;
 %       thresh - A threshold value which peaks must be larger than to be
 %           maxima or smaller than to be minima.
-global peakTHRESH;
-isTestVersion = false; % если false, то загружаем прописанные изображения, без интерфейса открытия
 peakSEL = 15;
 peakTHRESH = 1;
 isNextImage = true;
@@ -30,7 +28,7 @@ while(isNextImage)
     spectralLine = [];
     % цикл для поиска линии на одном изображении до тех пор, пока не удовлетворит результат
     while (repeatFindingSpectralLine)
-        [spectralLine imageFigHandler] = findSmoothSpectralLine(imgWithoutDark);
+        [spectralLine imageFigHandler] = findSmoothSpectralLine(imgWithoutDark, peakSEL, peakTHRESH);
 
         prompt = 'Сохранить спектральную линию? Если да, то введите имя этой линии, если нет - ничего не вводите (Enter):';
         nameLine = input(prompt,"s");
@@ -60,9 +58,7 @@ saveCalibrationsToOneFile();
 disp('Ура, калибровка окончена!');
 
 
-function [smoothDefinedSpectralLine imageFigHandler] = findSmoothSpectralLine(img)
-global peakSEL;
-global peakTHRESH;
+function [smoothDefinedSpectralLine imageFigHandler] = findSmoothSpectralLine(img, peakSEL, peakTHRESH)
 close all;
 image(img);
 drawnow;
@@ -73,15 +69,13 @@ if ~isempty(userInput)
 end
 image(img);
 imgOut = img;
-prompt = 'Кликните на середину линии поглощения в ключевых точках (Если линия изогнутая, то вверху, всередине и внизу)';
+prompt = 'Кликните на середину линии поглощения в ключевых точках (Если линия изогнутая, то вверху, всередине и внизу). В конце нажмите правую клавишу мыши.';
 disp(prompt);
-% [approximWaveChan,y,button] = ginputWhite(1);
-
 centerLinesX = [];
 centerLinesY = [];
 isRightclicked = false;
 while (~isRightclicked)
-    [x,y,button] = ginputWhite(1);
+    [x,y,button] = ginputColor(1, 'cyan');
     if(button == 3)
         isRightclicked = true;
     else
@@ -95,11 +89,11 @@ end
 
 prompt = 'Кликнете пиксель, ограничивающий область поиска линии поглощения СЛЕВА ';
 disp(prompt);
-[cordBorderLeft,y,button] = ginputWhite(1);
+[cordBorderLeft,y,button] = ginputColor(1, 'cyan');
 prompt = 'Кликнете пиксель, ограничивающий область поиска линии поглощения СПРАВА ';
 disp(prompt);
-[cordBorderRight,y,button] = ginputWhite(1);
-redVerticalLine =[]; %= zeros(length(img),2);
+[cordBorderRight,y,button] = ginputColor(1, 'cyan');
+correctPeaks =[]; %= zeros(length(img),2);
 red = img(:,:,1);
 for i=1:length(img)
     rowSpec = double(red(i, :));
@@ -120,14 +114,14 @@ for i=1:length(img)
     pair = [];
     if(~isempty(peakX))
         pair = [i, peakX];
-        redVerticalLine = [redVerticalLine; pair];
+        correctPeaks = [correctPeaks; pair];
     end
 end    
-lineSmooth = smooth( redVerticalLine(:,1), redVerticalLine(:,2), 0.3,'rloess');
+lineSmooth = smooth( correctPeaks(:,1), correctPeaks(:,2), 0.3,'rloess');
 pixelsAll = 1:1:length(img);
-lineSmoothImgLength = interp1(redVerticalLine(:,1), lineSmooth, pixelsAll, 'spline');
+lineSmoothImgLength = interp1(correctPeaks(:,1), lineSmooth, pixelsAll, 'spline');
 figure;
-plot( redVerticalLine(:,1), redVerticalLine(:,2));
+plot( correctPeaks(:,1), correctPeaks(:,2));
 hold on;
 plot(pixelsAll,lineSmoothImgLength);
 for i = 1:length(lineSmoothImgLength)
@@ -137,16 +131,23 @@ for i = 1:length(lineSmoothImgLength)
     if(lineSmoothImgLength(i) > length(imgOut))
         lineSmoothImgLength(i) = length(imgOut);
     end
-    imgOut(i, uint16(lineSmoothImgLength(i)), 1) = 0;
-    imgOut(i, uint16(lineSmoothImgLength(i)), 2) = 255;
-    imgOut(i, uint16(lineSmoothImgLength(i)), 3) = 0;
+%     imgOut(i, uint16(lineSmoothImgLength(i)), 1) = 0;
+%     imgOut(i, uint16(lineSmoothImgLength(i)), 2) = 255;
+%     imgOut(i, uint16(lineSmoothImgLength(i)), 3) = 0;
 end
 imageFigHandler = figure;
 image(imgOut);
+xTemp = 1:1:length(lineSmoothImgLength);
+hold on;
+plot(lineSmoothImgLength, xTemp, 'Color','cyan','LineWidth',0.2);
+hold off;
 % это магическое заклинание строит вертикальные полосы. В 2022 матлабе уже
 % можно использовать xline
 line([cordBorderLeft cordBorderLeft], get(gca, 'ylim'));
 line([cordBorderRight cordBorderRight], get(gca, 'ylim'));
+hold on;
+plot(centerLinesX, centerLinesY, '+', 'Color', 'cyan');
+hold off;
 smoothDefinedSpectralLine = lineSmoothImgLength;
 
 function  imgLoaded = loadImg()
@@ -205,7 +206,12 @@ if ~exist(folder, 'dir')
     mkdir(folder)
 end
 nameFile = [folder '\' name '.png'];
+position = get(imageFigHandler,'Position'); % эти операции для того, чтобы сохранить всю картинку независимо от того, насколько ее зумили и трансформировали
+zoom(1e-99);
+set(imageFigHandler,'Position',[100 100 500 500]);
 exportgraphics(imageFigHandler,nameFile,'Resolution',600 );
+set(imageFigHandler,'Position',position);
+drawnow();
 if exist(nameFile,"file")
     disp(['файл сохранен: ' nameFile])
 end

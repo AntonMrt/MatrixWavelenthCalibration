@@ -1,4 +1,6 @@
-function [out1,out2,out3] = ginput(arg1)
+function [out1,out2,out3] = ginputColor(arg1, color)
+global color_my;
+color_my = color;
 %GINPUT Graphical input from mouse.
 %   [X,Y] = GINPUT(N) gets N points from the current axes and returns
 %   the X- and Y-coordinates in length N vectors X and Y.  The cursor
@@ -276,11 +278,12 @@ set(crossHair(4), 'Position', [cp(1) cp(2)+gap thickness figHeight-cp(2)-gap]);
 end
 
 function crossHair = createCrossHair(fig)
+global color_my;
 % Create thin uicontrols with black backgrounds to simulate fullcrosshair pointer.
 % 1: horizontal left, 2: horizontal right, 3: vertical bottom, 4: vertical top
 %*************** CHANGED [0,0,0] TO [[1,1,1] to make cross hairs white. ******************
 for k = 1:4
-    crossHair(k) = uicontrol(fig, 'Style', 'text', 'Visible', 'off', 'Units', 'pixels', 'BackgroundColor', [0.5 0.5 1], 'HandleVisibility', 'off', 'HitTest', 'off'); %#ok<AGROW>
+    crossHair(k) = uicontrol(fig, 'Style', 'text', 'Visible', 'off', 'Units', 'pixels', 'BackgroundColor', color_my, 'HandleVisibility', 'off', 'HitTest', 'off'); %#ok<AGROW>
 end
 end
 

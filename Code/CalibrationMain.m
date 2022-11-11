@@ -4,10 +4,8 @@
 % Ёта операци€ необходима дл€ калибровки матричных спектрометров по длинам
 % волн
 
-
-
 function Main
-close all
+% close all
 global isTestVersion;
 isTestVersion = false; % если false, то загружаем прописанные изображени€, без интерфейса открыти€
 %       sel - The amount above surrounding data for a peak to be,
@@ -15,20 +13,23 @@ isTestVersion = false; % если false, то загружаем прописанные изображени€, без и
 %           the algorithm is more selective in finding peaks.
 %       thresh - A threshold value which peaks must be larger than to be
 %           maxima or smaller than to be minima.
+%       isSmoothPeaks - If true quadratic interpolation will be performed
+%           around each extrema to estimate the magnitude and the
+%           position of the peak in terms of fractional indicies
 peakSEL = 15;
 peakTHRESH = 1;
+isSmoothPeaks = false; %true может быть полезным при зашкале линии, когда образуетс€ плато с зашкальными значени€ми. ¬ остальных случа€х не рекомендую 
 isNextImage = true;
 % цикл по изображени€м матриц
 while(isNextImage)
 
     imgStart = loadImg();
-    imgWithoutDark = minusDarkChan(imgStart);
-
+    img = minusDarkChan(imgStart);
     repeatFindingSpectralLine = true;
     spectralLine = [];
     % цикл дл€ поиска линии на одном изображении до тех пор, пока не удовлетворит результат
     while (repeatFindingSpectralLine)
-        [spectralLine imageFigHandler] = findSmoothSpectralLine(imgWithoutDark, peakSEL, peakTHRESH);
+        [spectralLine imageFigHandler] = findSmoothSpectralLine(img, peakSEL, peakTHRESH, isSmoothPeaks);
 
         prompt = '—охранить спектральную линию? ≈сли да, то введите им€ этой линии, если нет - ничего не вводите (Enter):';
         nameLine = input(prompt,"s");
@@ -58,8 +59,8 @@ saveCalibrationsToOneFile();
 disp('”ра, калибровка окончена!');
 
 
-function [smoothDefinedSpectralLine imageFigHandler] = findSmoothSpectralLine(img, peakSEL, peakTHRESH)
-close all;
+function [smoothDefinedSpectralLine imageFigHandler] = findSmoothSpectralLine(img, peakSEL, peakTHRESH,isSmoothPeaks)
+% close all;
 image(img);
 drawnow;
 prompt = 'ѕрименить фильтр √аусса? ≈сли да, то введите стандартное отклонение дл€ фильтра (начните с единицы), если нет - ничего не вводите (Enter):';
@@ -97,7 +98,7 @@ correctPeaks =[]; %= zeros(length(img),2);
 red = img(:,:,1);
 for i=1:length(img)
     rowSpec = double(red(i, :));
-    [peakLoc, peakMag] = peakfinder(rowSpec,peakSEL, peakTHRESH, 1, false, false);
+    [peakLoc, peakMag] = peakfinder(rowSpec,peakSEL, peakTHRESH, 1, false, isSmoothPeaks);
 
     %отрисовка всех найденных пиков на изображении
     for j=1:length(peakLoc)

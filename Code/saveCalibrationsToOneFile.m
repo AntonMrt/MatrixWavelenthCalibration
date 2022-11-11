@@ -8,7 +8,10 @@ function saveCalibrationsToOneFile()
 
 [FileNames,PathName,FilterIndex] = uigetfile('*.txt', 'Выберите файлы, которые нужно объеденить', "MultiSelect","on");
 if(~iscell(FileNames))
-    return;
+    if(FileNames == 0)
+        disp('Сохранение всех калибровочных данных в csv файл отменено');
+        return;
+    end
 end
 
 calibrationBigFile = [];

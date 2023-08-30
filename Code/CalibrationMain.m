@@ -49,12 +49,27 @@ while(isNextImage)
     spectralLine = [];
     % цикл для поиска линии на одном изображении до тех пор, пока не удовлетворит результат
     while (repeatFindingSpectralLine)
-        [spectralLine imageFigHandler] = findSmoothSpectralLine(img(:,:,1), peakSEL, peakTHRESH, isSmoothPeaks);
+        [spectralLine spectralLineByValue imageFigHandler] = findSmoothSpectralLine(img(:,:,1), peakSEL, peakTHRESH, isSmoothPeaks);
 
         prompt = 'Сохранить спектральную линию? Если да, то введите имя этой линии, если нет - ничего не вводите (Enter):';
         nameLine = input(prompt,"s");
         if(~isempty(nameLine))
-            saveLineToProgramDir(spectralLine, nameLine);
+            prompt = 'Сохранить черную или зеленую линию (разные алгоритма поиска)? Если зеленую, то введите "пробел", если черную - ничего не вводите (Enter):';
+            str = input(prompt,"s");
+            if(str == ' ')
+                FLAG_NEW_VERSION_OF_FINDING_LINE = false;
+                disp('сохраняем черную линию')
+            else
+                FLAG_NEW_VERSION_OF_FINDING_LINE = true;
+                disp('сохраняем зеленую линию')
+            end
+            
+            if(FLAG_NEW_VERSION_OF_FINDING_LINE)
+                lineForSaving = spectralLineByValue;
+            else
+                lineForSaving = spectralLine;
+            end
+            saveLineToProgramDir(lineForSaving, nameLine);
             saveImageToProgramDir(imageFigHandler,nameLine);
         end
 
@@ -79,7 +94,8 @@ saveCalibrationsToOneFile();
 disp('Ура, калибровка окончена!');
 
 
-function [smoothDefinedSpectralLine imageFigHandler] = findSmoothSpectralLine(matrix, peakSEL, peakTHRESH,isSmoothPeaks)
+
+function [smoothDefinedSpectralLine smoothDefinedSpectralLineByValue imageFigHandler] = findSmoothSpectralLine(matrix, peakSEL, peakTHRESH,isSmoothPeaks)
 
 %нормализуем от 0 до 1
 normM = matrix;
@@ -96,12 +112,11 @@ end
 imagesc(normM);
 
 % изображение, на котором будем рисовать найденные линии
-v = normM; % my matrix
 map = colormap("parula");
-minv = min(v(:));
-maxv = max(v(:));
+minv = min(normM(:));
+maxv = max(normM(:));
 ncol = size(map,1);
-s = round(1+(ncol-1)*(v-minv)/(maxv-minv));
+s = round(1+(ncol-1)*(normM-minv)/(maxv-minv));
 imgOut = ind2rgb(s,map);
 
 prompt = 'Кликните на середину линии поглощения в ключевых точках (Если линия изогнутая, то вверху, всередине и внизу). В конце нажмите правую клавишу мыши.';
@@ -128,50 +143,89 @@ disp(prompt);
 prompt = 'Кликнете пиксель, ограничивающий область поиска линии поглощения СПРАВА ';
 disp(prompt);
 [cordBorderRight,y,button] = ginputColor(1, 'cyan');
-correctPeaks =[]; %= zeros(length(img),2);
-
-for i=1:length(normM)
+if(cordBorderRight < cordBorderLeft)
+    [cordBorderRight  cordBorderLeft] = deal(cordBorderLeft, cordBorderRight);
+end
+correctPeaks =[]; 
+correctPeaksByValue =[]; 
+for i=1:size(normM,1)
     rowSpec = double(normM(i, :));
     [peakLoc, peakMag] = peakfinder(rowSpec,peakSEL, peakTHRESH, 1, false, isSmoothPeaks);
 
     %отрисовка всех найденных пиков на изображении
-    for j=1:length(peakLoc)
-        imgOut(i, round(peakLoc(j)), 1) = 255;
-        imgOut(i, round(peakLoc(j)), 2) = 0;
-        imgOut(i, round(peakLoc(j)), 3) = 0;
-    end
-
-    peakX = findCorrectPeak(peakLoc, i, centerLinesX, centerLinesY, cordBorderLeft, cordBorderRight);
+%     for j=1:length(peakLoc)
+%         imgOut(i, round(peakLoc(j)), 1) = 255;
+%         imgOut(i, round(peakLoc(j)), 2) = 0;
+%         imgOut(i, round(peakLoc(j)), 3) = 0;
+%     end
+    peakX = findCorrectPeak(peakLoc, i, centerLinesX, centerLinesY, cordBorderLeft, cordBorderRight); 
+    
     %отрисовка только корректных пиков на изображении
     imgOut(i, round(peakX), 1) = 255;
     imgOut(i, round(peakX), 2) = 255;
     imgOut(i, round(peakX), 3) = 255;
+
     pair = [];
     if(~isempty(peakX))
         pair = [i, peakX];
         correctPeaks = [correctPeaks; pair];
     end
+
+    % Новый метод аппроксимации
+    peakXbyValue = findCorrectPeakByValue(rowSpec,peakLoc, cordBorderLeft, cordBorderRight);
+    if(~isempty(peakXbyValue))
+        if(imgOut(i, round(peakXbyValue), 1) == 255) %те пиксели, что найдены обоими методами красим зеленым
+            imgOut(i, round(peakXbyValue), 1) = 0;
+            imgOut(i, round(peakXbyValue), 2) = 160;
+            imgOut(i, round(peakXbyValue), 3) = 0;
+        else
+            imgOut(i, round(peakXbyValue), 1) = 160; % остальные желтым
+            imgOut(i, round(peakXbyValue), 2) = 160;
+            imgOut(i, round(peakXbyValue), 3) = 0;
+        end
+
+    end
+ 
+    pairByValue = [];
+        if(~isempty(peakXbyValue))
+        pairByValue = [i, peakXbyValue];
+        correctPeaksByValue = [correctPeaksByValue; pairByValue];
+    end
 end
 lineSmooth = smooth( correctPeaks(:,1), correctPeaks(:,2), 0.3,'rloess');
+lineSmoothByValue = smooth( correctPeaksByValue(:,1), correctPeaksByValue(:,2), 0.3,'rloess');
 pixelsAll = 1:1:length(normM);
 lineSmoothImgLength = interp1(correctPeaks(:,1), lineSmooth, pixelsAll, 'spline');
+lineSmoothImgLengthByValue = interp1(correctPeaksByValue(:,1), lineSmoothByValue, pixelsAll, 'spline');
 figure;
-plot( correctPeaks(:,1), correctPeaks(:,2));
 hold on;
-plot(pixelsAll,lineSmoothImgLength);
-for i = 1:length(lineSmoothImgLength)
-    if(lineSmoothImgLength(i) == 0)
-        lineSmoothImgLength(i) = 1;
+plot( correctPeaks(:,1), correctPeaks(:,2), 'magenta');
+plot( correctPeaksByValue(:,1), correctPeaksByValue(:,2),'yellow');
+plot(pixelsAll,lineSmoothImgLength, 'red');
+plot(pixelsAll,lineSmoothImgLengthByValue, 'green');
+for z = 1:length(lineSmoothImgLength)
+    if(lineSmoothImgLength(z) == 0)
+        lineSmoothImgLength(z) = 1;
     end
-    if(lineSmoothImgLength(i) > length(imgOut))
-        lineSmoothImgLength(i) = length(imgOut);
+    if(lineSmoothImgLength(z) > length(imgOut))
+        lineSmoothImgLength(z) = length(imgOut);
+    end
+end
+for z = 1:length(lineSmoothImgLengthByValue)
+    if(lineSmoothImgLengthByValue(z) == 0)
+        lineSmoothImgLengthByValue(z) = 1;
+    end
+    if(lineSmoothImgLengthByValue(z) > length(imgOut))
+        lineSmoothImgLengthByValue(z) = length(imgOut);
     end
 end
 imageFigHandler = figure;
 imagesc(imgOut);
 xTemp = 1:1:length(lineSmoothImgLength);
+xTempByValue = 1:1:length(lineSmoothImgLengthByValue);
 hold on;
 plot(lineSmoothImgLength, xTemp, 'Color','black','LineWidth',0.2);
+plot(lineSmoothImgLengthByValue, xTempByValue, 'Color','green','LineWidth',0.2);
 hold off;
 % это магическое заклинание строит вертикальные полосы. В 2022 матлабе уже
 % можно использовать xline
@@ -181,6 +235,7 @@ hold on;
 plot(centerLinesX, centerLinesY, '+', 'Color', 'cyan');
 hold off;
 smoothDefinedSpectralLine = lineSmoothImgLength;
+smoothDefinedSpectralLineByValue = lineSmoothImgLengthByValue;
 
 function  imgLoaded = loadImg()
 global isTestVersion;
@@ -299,3 +354,28 @@ for i  = 1:length(peaksVector)
         bestPeak = peaksVector(i);
     end
 end
+
+function bestPeak = findCorrectPeakByValue(matrixLine, peaksVector, cordBorderLeft, cordBorderRight)
+bestPeak = [];
+if(isempty(peaksVector) || isempty(matrixLine) )
+    disp('пустые данные на входе findCorrectPeakByValue')
+    return;
+end
+% выбор максимального пика внутри области
+peaksLocationsInsideBrdrs = [];
+for j=1:length(peaksVector)
+    if(peaksVector(j) > cordBorderLeft && peaksVector(j) < cordBorderRight)
+        peaksLocationsInsideBrdrs = [peaksLocationsInsideBrdrs peaksVector(j)];
+    end
+end
+if(~isempty(peaksLocationsInsideBrdrs))
+    peakValsInsideBrdrs = zeros(length(peaksLocationsInsideBrdrs), 1);
+    for j=1:length(peakValsInsideBrdrs)
+        peakValsInsideBrdrs(j) = matrixLine(peaksLocationsInsideBrdrs(j));
+    end
+    [maxPeakVal, maxPeakInd] = max(peakValsInsideBrdrs); 
+    bestPeak = peaksLocationsInsideBrdrs(maxPeakInd);
+end
+
+
+

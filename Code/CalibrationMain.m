@@ -20,7 +20,7 @@ isTestVersion = false; % если true, то загружаем прописанные изображения, без ин
 peakSEL = 0.02;
 peakTHRESH = 0.02;
 isSmoothPeaks = false; %true может быть полезным при зашкале линии, когда образуется плато с зашкальными значениями. В остальных случаях не рекомендую
-isNextImage = true;
+isNextImage = true; % true - будет предложено выбрать следующее изображение матрицы
 isMultiImageComposite = false; % false - оперируем только с одним изображением. True - загружаем серию снимков на разных экспозициях и складываем из них одну матрицу
 prompt = 'использовать набор одинаковых изображений с разными экспозициями? y/n [n]:';
 str = input(prompt,'s');
@@ -30,7 +30,6 @@ else
     isMultiImageComposite = false;
 end
 
-
 % цикл по изображениям матриц
 while(isNextImage)
 
@@ -39,38 +38,53 @@ while(isNextImage)
         doubleImg = loadImagesAsComposite();
         small = doubleImg(400:700,:,1);
         img = doubleImg;
+        test=1;
     else
         imgStart = loadImg();
         smallOne = imgStart(400:700,:,1);
         img = minusDarkChan(imgStart);
     end
 
+    
+    %тут делаем функцию построчного сглаживания изображения при помощи
+    %сплайнов, получаем сглаженное изображение (один его канал) и передаем его в функцию findSmoothSpectralLine
+    prompt = 'Введите коэффициент аппроксимации сплайна. (B0: 1e-3, B1: 2e-2, B2: 5e-4): ';
+    koefVal = input(prompt);
+    JOIN_ROWS_NUM = 5;
+    if(~isempty(koefVal))
+         splineMatrix = fitMatrixLinesWithSpline(img(:,:,1), koefVal, JOIN_ROWS_NUM);
+    else
+        splineMatrix = fitMatrixLinesWithSpline(img(:,:,1), 1e-3, JOIN_ROWS_NUM);
+        disp('Использован параметр по умолчанию 1е-3 для сплайнов');
+    end
     repeatFindingSpectralLine = true;
     spectralLine = [];
     % цикл для поиска линии на одном изображении до тех пор, пока не удовлетворит результат
     while (repeatFindingSpectralLine)
-        [spectralLine spectralLineByValue imageFigHandler] = findSmoothSpectralLine(img(:,:,1), peakSEL, peakTHRESH, isSmoothPeaks);
+       %[spectralLine spectralLineByValue imageFigHandler] = findSmoothSpectralLine(splineMatrix, peakSEL, peakTHRESH, isSmoothPeaks);
+       [spectralLine, spectralLineByValue, spectralLineByValueSpline, imageFigHandler]...
+           = findSmoothSpectralLine(img(:,:,1), peakSEL, peakTHRESH, isSmoothPeaks, splineMatrix);
 
         prompt = 'Сохранить спектральную линию? Если да, то введите имя этой линии, если нет - ничего не вводите (Enter):';
         nameLine = input(prompt,"s");
         if(~isempty(nameLine))
-            prompt = 'Сохранить черную или зеленую линию (разные алгоритма поиска)? Если зеленую, то введите "пробел", если черную - ничего не вводите (Enter):';
+            prompt = 'Сохранить красную(1), зеленую(2) или черную(3) линии (разные алгоритма поиска)? Введите № цвета линии: ';
             str = input(prompt,"s");
-            if(str == ' ')
-                FLAG_NEW_VERSION_OF_FINDING_LINE = false;
-                disp('сохраняем черную линию')
+            if(str == '1')
+                disp('сохраняем красную линию');
+                saveLineToProgramDir(spectralLine, nameLine);
+            elseif(str == '2')
+                disp('сохраняем зеленую линию');
+                saveLineToProgramDir(spectralLineByValue, nameLine);
+            elseif(str == '3')
+                disp('сохраняем черную линию');
+                saveLineToProgramDir(spectralLineByValueSpline, nameLine);
             else
-                FLAG_NEW_VERSION_OF_FINDING_LINE = true;
-                disp('сохраняем зеленую линию')
+                disp('Сохранение отменено');
             end
-            
-            if(FLAG_NEW_VERSION_OF_FINDING_LINE)
-                lineForSaving = spectralLineByValue;
-            else
-                lineForSaving = spectralLine;
-            end
-            saveLineToProgramDir(lineForSaving, nameLine);
             saveImageToProgramDir(imageFigHandler,nameLine);
+        else
+            disp('матлаб тупит с вводом.');
         end
 
         prompt = 'Найти еще одну спектральную линию на изображении? y/n [n]:';
@@ -94,8 +108,8 @@ saveCalibrationsToOneFile();
 disp('Ура, калибровка окончена!');
 
 
-
-function [smoothDefinedSpectralLine smoothDefinedSpectralLineByValue imageFigHandler] = findSmoothSpectralLine(matrix, peakSEL, peakTHRESH,isSmoothPeaks)
+function [smoothDefinedSpectralLine, smoothDefinedSpectralLineByValue, smoothDefinedSpectralLineByValueSpline, imageFigHandler]...
+    = findSmoothSpectralLine(matrix, peakSEL, peakTHRESH,isSmoothPeaks, splineMatrix)
 
 %нормализуем от 0 до 1
 normM = matrix;
@@ -147,31 +161,25 @@ if(cordBorderRight < cordBorderLeft)
     [cordBorderRight  cordBorderLeft] = deal(cordBorderLeft, cordBorderRight);
 end
 correctPeaks =[]; 
-correctPeaksByValue =[]; 
+correctPeaksByValue =[];
+correctPeaksByValueSpline = [];
 for i=1:size(normM,1)
     rowSpec = double(normM(i, :));
+    %                     ПОИСК БЛИЖАЙШИХ К ОПОРНЫМ ТОЧКАХ ПИКОВ
     [peakLoc, peakMag] = peakfinder(rowSpec,peakSEL, peakTHRESH, 1, false, isSmoothPeaks);
-
-    %отрисовка всех найденных пиков на изображении
-%     for j=1:length(peakLoc)
-%         imgOut(i, round(peakLoc(j)), 1) = 255;
-%         imgOut(i, round(peakLoc(j)), 2) = 0;
-%         imgOut(i, round(peakLoc(j)), 3) = 0;
-%     end
-    peakX = findCorrectPeak(peakLoc, i, centerLinesX, centerLinesY, cordBorderLeft, cordBorderRight); 
     
+    peakX = findCorrectPeak(peakLoc, i, centerLinesX, centerLinesY, cordBorderLeft, cordBorderRight); 
     %отрисовка только корректных пиков на изображении
     imgOut(i, round(peakX), 1) = 255;
     imgOut(i, round(peakX), 2) = 255;
     imgOut(i, round(peakX), 3) = 255;
-
     pair = [];
     if(~isempty(peakX))
         pair = [i, peakX];
         correctPeaks = [correctPeaks; pair];
     end
 
-    % Новый метод аппроксимации
+    %                     ПОИСК ПИКОВ ПО МАКСИМАЛЬНОМУ ЗНАЧЕНИЮ
     peakXbyValue = findCorrectPeakByValue(rowSpec,peakLoc, cordBorderLeft, cordBorderRight);
     if(~isempty(peakXbyValue))
         if(imgOut(i, round(peakXbyValue), 1) == 255) %те пиксели, что найдены обоими методами красим зеленым
@@ -183,26 +191,46 @@ for i=1:size(normM,1)
             imgOut(i, round(peakXbyValue), 2) = 160;
             imgOut(i, round(peakXbyValue), 3) = 0;
         end
-
     end
- 
     pairByValue = [];
-        if(~isempty(peakXbyValue))
+    if(~isempty(peakXbyValue))
         pairByValue = [i, peakXbyValue];
         correctPeaksByValue = [correctPeaksByValue; pairByValue];
+    end
+
+    %                    ПОИСК ПИКОВ ПРИ ПОМОЩИ ПРЕДВАРИТЕЛЬНОГО
+    %                    СГЛАЖИВАНИЯ СПЛАЙНОМ СПЕКТРА (А ПОТОМ ПО ЗНАЧЕНИЮ)
+    rowSpecSpline = double(splineMatrix(i, :));
+    [peakLocSpline, peakMagS] = peakfinder(rowSpecSpline,peakSEL, peakTHRESH, 1, false, isSmoothPeaks);
+    peakXbyValueSpline = findCorrectPeakByValue(rowSpecSpline,peakLoc, cordBorderLeft, cordBorderRight);
+    % красный цвет для найденных пикселей
+    if(~isempty(peakXbyValueSpline))
+            imgOut(i, round(peakXbyValueSpline), 1) = 255;
+            imgOut(i, round(peakXbyValueSpline), 2) = 0;
+            imgOut(i, round(peakXbyValueSpline), 3) = 0;
+    end
+    pairByValueSpline = [];
+    if(~isempty(peakXbyValueSpline))
+        pairByValueSpline = [i, peakXbyValueSpline];
+        correctPeaksByValueSpline = [correctPeaksByValueSpline; pairByValueSpline];
     end
 end
 lineSmooth = smooth( correctPeaks(:,1), correctPeaks(:,2), 0.3,'rloess');
 lineSmoothByValue = smooth( correctPeaksByValue(:,1), correctPeaksByValue(:,2), 0.3,'rloess');
+lineSmoothByValueSpline = smooth( correctPeaksByValueSpline(:,1), correctPeaksByValueSpline(:,2), 0.3,'rloess');
 pixelsAll = 1:1:length(normM);
 lineSmoothImgLength = interp1(correctPeaks(:,1), lineSmooth, pixelsAll, 'spline');
 lineSmoothImgLengthByValue = interp1(correctPeaksByValue(:,1), lineSmoothByValue, pixelsAll, 'spline');
+lineSmoothImgLengthByValueSpline = interp1(correctPeaksByValueSpline(:,1), lineSmoothByValueSpline, pixelsAll, 'spline');
+
+
 figure;
 hold on;
 plot( correctPeaks(:,1), correctPeaks(:,2), 'magenta');
 plot( correctPeaksByValue(:,1), correctPeaksByValue(:,2),'yellow');
 plot(pixelsAll,lineSmoothImgLength, 'red');
 plot(pixelsAll,lineSmoothImgLengthByValue, 'green');
+plot(pixelsAll,lineSmoothImgLengthByValueSpline, 'black');
 for z = 1:length(lineSmoothImgLength)
     if(lineSmoothImgLength(z) == 0)
         lineSmoothImgLength(z) = 1;
@@ -219,13 +247,23 @@ for z = 1:length(lineSmoothImgLengthByValue)
         lineSmoothImgLengthByValue(z) = length(imgOut);
     end
 end
+for z = 1:length(lineSmoothImgLengthByValueSpline)
+    if(lineSmoothImgLengthByValueSpline(z) == 0)
+        lineSmoothImgLengthByValueSpline(z) = 1;
+    end
+    if(lineSmoothImgLengthByValueSpline(z) > length(imgOut))
+        lineSmoothImgLengthByValueSpline(z) = length(imgOut);
+    end
+end
 imageFigHandler = figure;
 imagesc(imgOut);
 xTemp = 1:1:length(lineSmoothImgLength);
 xTempByValue = 1:1:length(lineSmoothImgLengthByValue);
+xTempByValueSpline = 1:1:length(lineSmoothImgLengthByValue);
 hold on;
-plot(lineSmoothImgLength, xTemp, 'Color','black','LineWidth',0.2);
+plot(lineSmoothImgLength, xTemp, 'Color','red','LineWidth',0.2);
 plot(lineSmoothImgLengthByValue, xTempByValue, 'Color','green','LineWidth',0.2);
+plot(lineSmoothImgLengthByValueSpline, xTempByValueSpline, 'Color','black','LineWidth',0.2);
 hold off;
 % это магическое заклинание строит вертикальные полосы. В 2022 матлабе уже
 % можно использовать xline
@@ -236,6 +274,7 @@ plot(centerLinesX, centerLinesY, '+', 'Color', 'cyan');
 hold off;
 smoothDefinedSpectralLine = lineSmoothImgLength;
 smoothDefinedSpectralLineByValue = lineSmoothImgLengthByValue;
+smoothDefinedSpectralLineByValueSpline = lineSmoothImgLengthByValueSpline;
 
 function  imgLoaded = loadImg()
 global isTestVersion;
@@ -361,6 +400,7 @@ if(isempty(peaksVector) || isempty(matrixLine) )
     disp('пустые данные на входе findCorrectPeakByValue')
     return;
 end
+
 % выбор максимального пика внутри области
 peaksLocationsInsideBrdrs = [];
 for j=1:length(peaksVector)
@@ -377,5 +417,37 @@ if(~isempty(peaksLocationsInsideBrdrs))
     bestPeak = peaksLocationsInsideBrdrs(maxPeakInd);
 end
 
+% fittedMatrix - матрица со сглаженными строками спайном с параметром filtParam
+% для ускорения быстродействия рассчитываем сплайн не для каждой строки, а
+% для числа строк joinRowsNum. Эти строки усредняются и для них
+% расчитывается сплайн.
+function fittedMatrix = fitMatrixLinesWithSpline(matrix, filtParam, joinRowsNum)
+hw = waitbar(0,'Smooth','Name','Filtering...',...
+    'CreateCancelBtn','setappdata(gcbf,''canceling'',1)');
+setappdata(hw,'canceling',0);
 
+ft = fittype( 'smoothingspline' );
+opts = fitoptions( 'Method', 'SmoothingSpline' );
+opts.SmoothingParam = filtParam;
+
+compressedMatrix = blockproc(matrix, [joinRowsNum 1], @(x) mean(x.data, 'all'));
+fitobjectsForRows = cell(1, size(compressedMatrix,1));
+for i = 1:size(compressedMatrix,1)
+    if getappdata(hw,'canceling')
+        break;
+    end
+    waitbar(i/size(compressedMatrix,1));
+    [xData, yData] = prepareCurveData( [], compressedMatrix(i,:) );
+    fitobjectsForRows{i} = fit(xData, yData, ft, opts);
+end
+close(hw);
+delete(hw);
+x = 1:size(matrix,2);
+fittedMatrix = zeros(size(matrix,1),size(matrix,2));
+for i = 1:size(matrix,1)
+    fittedMatrix(i,:) = feval(fitobjectsForRows{ceil(i / joinRowsNum)}, x)';
+end
+disp('сглаживание сплайном завершено');
+
+    
 

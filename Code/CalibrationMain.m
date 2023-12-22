@@ -38,11 +38,11 @@ while(isNextImage)
         doubleImg = loadImagesAsComposite();
         small = doubleImg(400:700,:,1);
         img = doubleImg;
-        test=1;
     else
         imgStart = loadImg();
         smallOne = imgStart(400:700,:,1);
         img = minusDarkChan(imgStart);
+        img = double(img);
     end
 
     
@@ -112,9 +112,9 @@ function [smoothDefinedSpectralLine, smoothDefinedSpectralLineByValue, smoothDef
     = findSmoothSpectralLine(matrix, peakSEL, peakTHRESH,isSmoothPeaks, splineMatrix)
 
 %нормализуем от 0 до 1
-normM = matrix;
-normM = normM - min(normM(:));
-normM = normM ./ max(normM(:));
+minMat = min(matrix(:));
+maxMat = max(matrix(:));
+normM = (matrix - minMat)./(maxMat - minMat);
 
 imagesc(normM);
 drawnow;

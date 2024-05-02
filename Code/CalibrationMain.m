@@ -166,7 +166,7 @@ correctPeaksByValueSpline = [];
 for i=1:size(normM,1)
     rowSpec = double(normM(i, :));
     %                     ПОИСК БЛИЖАЙШИХ К ОПОРНЫМ ТОЧКАХ ПИКОВ
-    [peakLoc, peakMag] = peakfinder(rowSpec,peakSEL, peakTHRESH, 1, false, isSmoothPeaks);
+    [peakLoc, ~] = peakfinder(rowSpec,peakSEL, peakTHRESH, 1, false, isSmoothPeaks);
     
     peakX = findCorrectPeak(peakLoc, i, centerLinesX, centerLinesY, cordBorderLeft, cordBorderRight); 
     %отрисовка только корректных пиков на изображении

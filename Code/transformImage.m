@@ -7,7 +7,7 @@
 slCharacterEncoding('UTF-8')
 close all
 % изображение
-imgLoaded = imread('dataForImageCorrScript/b1.bmp');
+imgLoaded = imread('dataForImageCorrScript - 2021-2022/b1.bmp');
 monoImg = imgLoaded(:,:,1);
 monoImg = imgaussfilt(monoImg,3);
 
@@ -18,7 +18,7 @@ opts.Delimiter = ";";
 opts.VariableTypes = ["double", "double", "double"];
 opts.ExtraColumnsRule = "ignore";
 opts.EmptyLineRule = "read";
-waveCalibCoefbaumer = readtable("dataForImageCorrScript/waveCalibCoef_baumer1.csv", opts);
+waveCalibCoefbaumer = readtable("dataForImageCorrScript - 2021-2022/waveCalibCoef_baumer1.csv", opts);
 waveCalibCoefbaumer = table2array(waveCalibCoefbaumer);
 clear opts
 

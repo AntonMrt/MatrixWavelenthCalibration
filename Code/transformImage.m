@@ -8,6 +8,7 @@ slCharacterEncoding('UTF-8')
 close all
 % изображение
 imgLoaded = imread('dataForImageCorrScript - 2021-2022/b1.bmp');
+% imgLoaded = imread('dataForImageCorrScript - 2023/test image transform/b0_Xe.bmp');
 monoImg = imgLoaded(:,:,1);
 monoImg = imgaussfilt(monoImg,3);
 
@@ -19,6 +20,7 @@ opts.VariableTypes = ["double", "double", "double"];
 opts.ExtraColumnsRule = "ignore";
 opts.EmptyLineRule = "read";
 waveCalibCoefbaumer = readtable("dataForImageCorrScript - 2021-2022/waveCalibCoef_baumer1.csv", opts);
+% waveCalibCoefbaumer = readtable("dataForImageCorrScript - 2023/test image transform/2023.08/waveCalibCoef_baumer0.csv", opts);
 waveCalibCoefbaumer = table2array(waveCalibCoefbaumer);
 clear opts
 
@@ -41,5 +43,7 @@ imagesc(matrixCorrect,"XData",xNew);
 colormap gray;
 hold on;
 xline([406.8,	446.37, 516.41, 637.69, 892.74, 813.6],"Color",'red', "Alpha", 0.5, "LineWidth", 1,"LineStyle","--");
+% xline([404.65,	435.83,	546.07,	759.4,	810.4,	877.67,	828.01],"Color",'red', "Alpha", 0.5, "LineWidth", 1,"LineStyle","--");
+
 
 

@@ -42,8 +42,7 @@ while(isNextImage)
     repeatFindingSpectralLine = true;
     % цикл для поиска линии на одном изображении до тех пор, пока не удовлетворит результат
     while (repeatFindingSpectralLine)
-       [spectralLine, spectralLineByValue, imageFigHandler] = findSmoothSpectralLine(img(:,:,1), peakSEL, peakTHRESH, isSmoothPeaks);
-
+        [spectralLine, spectralLineByValue, imageFigHandler] = findSmoothSpectralLine(img(:,:,1), peakSEL, peakTHRESH, isSmoothPeaks);
         prompt = 'Сохранить спектральную линию? Если да, то введите имя этой линии, если нет - ничего не вводите (Enter):';
         nameLine = input(prompt,"s");
         if(~isempty(nameLine))
@@ -85,7 +84,6 @@ disp('Ура, калибровка окончена!');
 
 
 function [smoothDefinedSpectralLine, smoothDefinedSpectralLineByValue, imageFigHandler] = findSmoothSpectralLine(matrix, peakSEL, peakTHRESH,isSmoothPeaks)
-
 %нормализуем от 0 до 1
 minMat = min(matrix(:));
 maxMat = max(matrix(:));
@@ -135,7 +133,7 @@ disp(prompt);
 if(cordBorderRight < cordBorderLeft)
     [cordBorderRight,  cordBorderLeft] = deal(cordBorderLeft, cordBorderRight);
 end
-correctPeaks =[]; 
+correctPeaks =[];
 correctPeaksByValue =[];
 colorLightRed = [255, 150, 150]/255;
 colorLightGreen = [180, 255, 180]/255;
@@ -143,8 +141,8 @@ for i=1:size(normM,1)
     rowSpec = double(normM(i, :));
     %                     ПОИСК БЛИЖАЙШИХ К ОПОРНЫМ ТОЧКАХ ПИКОВ
     [peakLoc, ~] = peakfinder(rowSpec,peakSEL, peakTHRESH, 1, false, isSmoothPeaks);
-    
-    peakX = findCorrectPeak(peakLoc, i, centerLinesX, centerLinesY, cordBorderLeft, cordBorderRight); 
+
+    peakX = findCorrectPeak(peakLoc, i, centerLinesX, centerLinesY, cordBorderLeft, cordBorderRight);
     %отрисовка только корректных пиков на изображении
 
     imgOut(i, round(peakX), 1) = colorLightRed(1);
@@ -173,11 +171,13 @@ for i=1:size(normM,1)
         correctPeaksByValue = [correctPeaksByValue; pairByValue];
     end
 end
+
 lineSmooth = smooth( correctPeaks(:,1), correctPeaks(:,2), 0.3,'rloess');
 lineSmoothByValue = smooth( correctPeaksByValue(:,1), correctPeaksByValue(:,2), 0.3,'rloess');
 pixelsAll = 1:1:length(normM);
 lineSmoothImgLength = interp1(correctPeaks(:,1), lineSmooth, pixelsAll, 'spline');
 lineSmoothImgLengthByValue = interp1(correctPeaksByValue(:,1), lineSmoothByValue, pixelsAll, 'spline');
+
 
 figure;
 hold on;
@@ -219,6 +219,7 @@ plot(centerLinesX, centerLinesY, '+', 'Color', 'cyan');
 hold off;
 smoothDefinedSpectralLine = lineSmoothImgLength;
 smoothDefinedSpectralLineByValue = lineSmoothImgLengthByValue;
+
 
 function  imgLoaded = loadImg()
 [FileName,PathName,~] = uigetfile('*.*');
@@ -342,10 +343,10 @@ if(~isempty(peaksLocationsInsideBrdrs))
     for j=1:length(peakValsInsideBrdrs)
         peakValsInsideBrdrs(j) = matrixLine(peaksLocationsInsideBrdrs(j));
     end
-    [~, maxPeakInd] = max(peakValsInsideBrdrs); 
+    [~, maxPeakInd] = max(peakValsInsideBrdrs);
     bestPeak = peaksLocationsInsideBrdrs(maxPeakInd);
 end
 
 
-    
+
 

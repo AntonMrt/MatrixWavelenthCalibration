@@ -22,7 +22,7 @@ PEAK_THRESH = 0.02;
 %           position of the peak in terms of fractional indicies
 IS_SMOOTH_PEAKS = false; %true может быть полезным при зашкале линии, когда образуется плато с зашкальными значениями. В остальных случаях не рекомендую
 
-IS_NEED_TRANSPOSE = false; % ставим false, если по оси X длины волн, true - когда пространственная координата
+IS_NEED_TRANSPOSE = true; % ставим false, если по оси X длины волн, true - когда пространственная координата
 %%
 
 isNextImage = true; % true - будет предложено выбрать следующее изображение матрицы
@@ -39,7 +39,7 @@ while(isNextImage)
 
     if(isMultiImageComposite)
         % создаем double композит изображений
-        doubleImg = loadImagesAsComposite();
+        [doubleImg, ~, ~] = loadImagesAsComposite();
         img = doubleImg;
     else
         imgStart = loadImg();
@@ -235,30 +235,12 @@ smoothDefinedSpectralLineByValue = lineSmoothImgLengthByValue;
 
 
 function  imgLoaded = loadImg()
-[FileName,PathName,~] = uigetfile('*.*');
-s1 = convertCharsToStrings(PathName);
-s2 = convertCharsToStrings(FileName);
-s3 = s1 + s2;
-imgLoaded = imread(convertStringsToChars(s3));
-disp(['Загружено: ' convertStringsToChars(s3) ]);
-
-
-function doubleCompositeImg = loadImagesAsComposite()
-[FileName,PathName,~] = uigetfile('*.*','MultiSelect','on');
-
-s1 = convertCharsToStrings(PathName);
-s2 = convertCharsToStrings(FileName);
-nFiles = length(s2);
-for i=1:nFiles
-    s3 = s1 + s2(i);
-    imgLoaded = imread(convertStringsToChars(s3));
-    if(i==1)
-        doubleCompositeImg = double(imgLoaded);
-    end
-    disp(['Загружено: ' convertStringsToChars(s3) ]);
-
-    doubleCompositeImg = doubleCompositeImg + double(imgLoaded);
+[imgLoaded, ~, ~] = loadSingleFrame();
+if isempty(imgLoaded)
+    error('Файл не выбран.');
 end
+
+
 
 function img = minusDarkChan(imgStart)
 prompt = 'Выбрать фотоснимок с темновым сигналом? y/n [n]: ';
@@ -362,6 +344,169 @@ if(~isempty(peaksLocationsInsideBrdrs))
 end
 
 
+function [imgLoaded, xAxis, meta] = loadInstrumentTxt(fullName)
+fid = fopen(fullName, 'r');
+if fid == -1
+    error('Не удалось открыть файл: %s', fullName);
+end
+
+meta = struct();
+dataLines = {};
+isDataBlock = false;
+
+while ~feof(fid)
+    line = fgetl(fid);
+
+    if ~ischar(line)
+        continue;
+    end
+
+    line = strtrim(line);
+
+    if isempty(line)
+        continue;
+    end
+
+    nums = sscanf(line, '%f').';
+
+    if ~isDataBlock
+        if numel(nums) >= 2
+            isDataBlock = true;
+            dataLines{end + 1} = line;
+        else
+            parts = split(line, ':');
+
+            if numel(parts) >= 2
+                key = matlab.lang.makeValidName(strtrim(parts{1}));
+                value = strtrim(strjoin(parts(2:end), ':'));
+                meta.(key) = value;
+            end
+        end
+    else
+        dataLines{end + 1} = line;
+    end
+end
+
+fclose(fid);
+
+if isempty(dataLines)
+    error('В файле %s не найдена числовая таблица.', fullName);
+end
+
+firstRow = sscanf(dataLines{1}, '%f').';
+nRows = numel(dataLines);
+nCols = numel(firstRow);
+
+A = zeros(nRows, nCols);
+A(1, :) = firstRow;
+
+for i = 2:nRows
+    row = sscanf(dataLines{i}, '%f').';
+
+    if numel(row) ~= nCols
+        error('В файле %s строка %d имеет %d столбцов, ожидалось %d.', ...
+            fullName, i, numel(row), nCols);
+    end
+
+    A(i, :) = row;
+end
+
+xAxis = A(:, 1);
+imgLoaded = A(:, 2:end);
+imgLoaded = double(imgLoaded);
+
+
+function [imgLoaded, xAxis, meta] = loadSingleFrame()
+[FileName, PathName, ~] = uigetfile( ...
+    {'*.txt;*.png;*.jpg;*.jpeg;*.bmp;*.tif;*.tiff', ...
+    'Supported files (*.txt, *.png, *.jpg, *.jpeg, *.bmp, *.tif, *.tiff)'}, ...
+    'Выберите файл');
+
+imgLoaded = [];
+xAxis = [];
+meta = struct();
+
+if isequal(FileName, 0)
+    return;
+end
+
+fullName = fullfile(PathName, FileName);
+[~, ~, ext] = fileparts(fullName);
+ext = lower(ext);
+
+switch ext
+    case '.txt'
+        [imgLoaded, xAxis, meta] = loadInstrumentTxt(fullName);
+    otherwise
+        imgLoaded = imread(fullName);
+        if size(imgLoaded, 3) == 3
+            imgLoaded = rgb2gray(imgLoaded);
+        end
+        imgLoaded = double(imgLoaded);
+end
+
+disp(['Загружено: ' fullName]);
 
 
 
+function [doubleCompositeImg, xAxis, metaList] = loadImagesAsComposite()
+[FileName, PathName, ~] = uigetfile( ...
+    {'*.txt;*.png;*.jpg;*.jpeg;*.bmp;*.tif;*.tiff', ...
+    'Supported files (*.txt, *.png, *.jpg, *.jpeg, *.bmp, *.tif, *.tiff)'}, ...
+    'Выберите файлы', ...
+    'MultiSelect', 'on');
+
+doubleCompositeImg = [];
+xAxis = [];
+metaList = {};
+
+if isequal(FileName, 0)
+    return;
+end
+
+FileName = cellstr(FileName);
+nFiles = numel(FileName);
+
+for i = 1:nFiles
+    fullName = fullfile(PathName, FileName{i});
+    [~, ~, ext] = fileparts(fullName);
+    ext = lower(ext);
+
+    currentXAxis = [];
+    currentMeta = struct();
+
+    switch ext
+        case '.txt'
+            [imgLoaded, currentXAxis, currentMeta] = loadInstrumentTxt(fullName);
+
+        otherwise
+            imgLoaded = imread(fullName);
+
+            if size(imgLoaded, 3) == 3
+                imgLoaded = rgb2gray(imgLoaded);
+            end
+
+            imgLoaded = double(imgLoaded);
+    end
+
+    if i == 1
+        doubleCompositeImg = imgLoaded;
+        refSize = size(imgLoaded);
+        xAxis = currentXAxis;
+    else
+        if ~isequal(size(imgLoaded), refSize)
+            error('Размер файла %s не совпадает с размером первого массива.', fullName);
+        end
+
+        if ~isempty(currentXAxis) && ~isempty(xAxis)
+            if numel(currentXAxis) ~= numel(xAxis) || any(currentXAxis ~= xAxis)
+                error('Ось первого столбца в файле %s не совпадает с первым файлом.', fullName);
+            end
+        end
+
+        doubleCompositeImg = doubleCompositeImg + imgLoaded;
+    end
+
+    metaList{i} = currentMeta;
+    disp(['Загружено: ' fullName]);
+end

@@ -11,7 +11,7 @@ function CalibrationMain
 %       sel - The amount above surrounding data for a peak to be,
 %           identified (default = (max(x0)-min(x0))/4). Larger values mean
 %           the algorithm is more selective in finding peaks.
-PEAL_SEL = 0.02;
+PEAK_SEL = 0.02;
 
 %       thresh - A threshold value which peaks must be larger than to be
 %           maxima or smaller than to be minima.
@@ -24,6 +24,13 @@ IS_SMOOTH_PEAKS = false; %true может быть полезным при зашкале линии, когда обра
 
 IS_NEED_TRANSPOSE = false; % ставим false, если по оси X длины волн, true - когда пространственна€ координата
 %%
+fprintf(['«дравствуй, друг! “вои настройки: \n' ...
+    'PEAK_SEL: %d \n' ...
+    'PEAK_THRESH: %d \n' ...
+    'IS_SMOOTH_PEAKS: %s \n' ...
+    'IS_NEED_TRANSPOSE: %s \n'], PEAK_SEL, PEAK_THRESH, string(IS_SMOOTH_PEAKS), string(IS_NEED_TRANSPOSE));
+
+
 
 isNextImage = true; % true - будет предложено выбрать следующее изображение матрицы
 prompt = 'использовать набор одинаковых изображений с разными экспозици€ми? y/n [n]:';
@@ -56,7 +63,7 @@ while(isNextImage)
     repeatFindingSpectralLine = true;
     % цикл дл€ поиска линии на одном изображении до тех пор, пока не удовлетворит результат
     while (repeatFindingSpectralLine)
-        [spectralLine, spectralLineByValue, imageFigHandler] = findSmoothSpectralLine(img, PEAL_SEL, PEAK_THRESH, IS_SMOOTH_PEAKS);
+        [spectralLine, spectralLineByValue, imageFigHandler] = findSmoothSpectralLine(img, PEAK_SEL, PEAK_THRESH, IS_SMOOTH_PEAKS);
         prompt = '—охранить спектральную линию? ≈сли да, то введите им€ этой линии, если нет - ничего не вводите (Enter):';
         nameLine = input(prompt,"s");
         if(~isempty(nameLine))

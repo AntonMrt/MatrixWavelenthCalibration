@@ -22,7 +22,7 @@ PEAK_THRESH = 0.02;
 %           position of the peak in terms of fractional indicies
 IS_SMOOTH_PEAKS = false; %true может быть полезным при зашкале линии, когда образуется плато с зашкальными значениями. В остальных случаях не рекомендую
 
-IS_NEED_TRANSPOSE = true; % ставим false, если по оси X длины волн, true - когда пространственная координата
+IS_NEED_TRANSPOSE = false; % ставим false, если по оси X длины волн, true - когда пространственная координата
 %%
 
 isNextImage = true; % true - будет предложено выбрать следующее изображение матрицы

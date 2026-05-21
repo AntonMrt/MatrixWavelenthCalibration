@@ -5,18 +5,26 @@
 % волн
 
 function CalibrationMain
+
+%%  -- ПЕРЕМЕННЫЕ КАПСОМ ЗАДАЕТ ПОЛЬЗОВАТЕЛЬ СКРИПТА --
+
 %       sel - The amount above surrounding data for a peak to be,
 %           identified (default = (max(x0)-min(x0))/4). Larger values mean
 %           the algorithm is more selective in finding peaks.
+PEAL_SEL = 0.02;
+
 %       thresh - A threshold value which peaks must be larger than to be
 %           maxima or smaller than to be minima.
-%       isSmoothPeaks - If true quadratic interpolation will be performed
+PEAK_THRESH = 0.02;
+
+%       IS_SMOOTH_PEAKS - If true quadratic interpolation will be performed
 %           around each extrema to estimate the magnitude and the
 %           position of the peak in terms of fractional indicies
+IS_SMOOTH_PEAKS = false; %true может быть полезным при зашкале линии, когда образуется плато с зашкальными значениями. В остальных случаях не рекомендую
 
-peakSEL = 0.02;
-peakTHRESH = 0.02;
-isSmoothPeaks = false; %true может быть полезным при зашкале линии, когда образуется плато с зашкальными значениями. В остальных случаях не рекомендую
+IS_NEED_TRANSPOSE = false; % ставим false, если по оси X длины волн, true - когда пространственная координата
+%%
+
 isNextImage = true; % true - будет предложено выбрать следующее изображение матрицы
 prompt = 'использовать набор одинаковых изображений с разными экспозициями? y/n [n]:';
 str = input(prompt,'s');
@@ -38,11 +46,17 @@ while(isNextImage)
         img = minusDarkChan(imgStart);
         img = double(img);
     end
+    if size(img, 3) == 3 % иногда может загриться в моно, иногда в rgb
+        img = img(:,:,1);
+    end
+    if(IS_NEED_TRANSPOSE)
+        img = img';
+    end
 
     repeatFindingSpectralLine = true;
     % цикл для поиска линии на одном изображении до тех пор, пока не удовлетворит результат
     while (repeatFindingSpectralLine)
-        [spectralLine, spectralLineByValue, imageFigHandler] = findSmoothSpectralLine(img(:,:,1), peakSEL, peakTHRESH, isSmoothPeaks);
+        [spectralLine, spectralLineByValue, imageFigHandler] = findSmoothSpectralLine(img, PEAL_SEL, PEAK_THRESH, IS_SMOOTH_PEAKS);
         prompt = 'Сохранить спектральную линию? Если да, то введите имя этой линии, если нет - ничего не вводите (Enter):';
         nameLine = input(prompt,"s");
         if(~isempty(nameLine))
@@ -83,7 +97,7 @@ saveCalibrationsToOneFile();
 disp('Ура, калибровка окончена!');
 
 
-function [smoothDefinedSpectralLine, smoothDefinedSpectralLineByValue, imageFigHandler] = findSmoothSpectralLine(matrix, peakSEL, peakTHRESH,isSmoothPeaks)
+function [smoothDefinedSpectralLine, smoothDefinedSpectralLineByValue, imageFigHandler] = findSmoothSpectralLine(matrix, PEAL_SEL, PEAK_THRESH,IS_SMOOTH_PEAKS)
 %нормализуем от 0 до 1
 minMat = min(matrix(:));
 maxMat = max(matrix(:));
@@ -102,8 +116,8 @@ imagesc(normM);
 map = colormap("parula");
 minv = min(normM(:));
 maxv = max(normM(:));
-ncol = size(map,1);
-s = round(1+(ncol-1)*(normM-minv)/(maxv-minv));
+ncolols = size(map,1);
+s = round(1+(ncolols-1)*(normM-minv)/(maxv-minv));
 imgOut = ind2rgb(s,map);
 
 prompt = 'Кликните на середину линии поглощения в ключевых точках (Если линия изогнутая, то вверху, всередине и внизу). В конце нажмите правую клавишу мыши.';
@@ -140,7 +154,7 @@ colorLightGreen = [180, 255, 180]/255;
 for i=1:size(normM,1)
     rowSpec = double(normM(i, :));
     %                     ПОИСК БЛИЖАЙШИХ К ОПОРНЫМ ТОЧКАХ ПИКОВ
-    [peakLoc, ~] = peakfinder(rowSpec,peakSEL, peakTHRESH, 1, false, isSmoothPeaks);
+    [peakLoc, ~] = peakfinder(rowSpec,PEAL_SEL, PEAK_THRESH, 1, false, IS_SMOOTH_PEAKS);
     peakX = findCorrectPeak(peakLoc, i, centerLinesX, centerLinesY, cordBorderLeft, cordBorderRight);
     %отрисовка только корректных пиков на изображении
 
@@ -173,7 +187,7 @@ end
 
 lineSmooth = smooth( correctPeaks(:,1), correctPeaks(:,2), 0.3,'rloess');
 lineSmoothByValue = smooth( correctPeaksByValue(:,1), correctPeaksByValue(:,2), 0.3,'rloess');
-pixelsAll = 1:1:length(normM);
+pixelsAll = 1:1:size(normM,1);
 lineSmoothImgLength = interp1(correctPeaks(:,1), lineSmooth, pixelsAll, 'spline');
 lineSmoothImgLengthByValue = interp1(correctPeaksByValue(:,1), lineSmoothByValue, pixelsAll, 'spline');
 
@@ -188,16 +202,16 @@ for z = 1:length(lineSmoothImgLength)
     if(lineSmoothImgLength(z) == 0)
         lineSmoothImgLength(z) = 1;
     end
-    if(lineSmoothImgLength(z) > length(imgOut))
-        lineSmoothImgLength(z) = length(imgOut);
+    if(lineSmoothImgLength(z) > size(imgOut,2))
+        lineSmoothImgLength(z) = size(imgOut,2);
     end
 end
 for z = 1:length(lineSmoothImgLengthByValue)
     if(lineSmoothImgLengthByValue(z) == 0)
         lineSmoothImgLengthByValue(z) = 1;
     end
-    if(lineSmoothImgLengthByValue(z) > length(imgOut))
-        lineSmoothImgLengthByValue(z) = length(imgOut);
+    if(lineSmoothImgLengthByValue(z) > size(imgOut,2))
+        lineSmoothImgLengthByValue(z) = size(imgOut,2);
     end
 end
 
@@ -231,6 +245,7 @@ disp(['Загружено: ' convertStringsToChars(s3) ]);
 
 function doubleCompositeImg = loadImagesAsComposite()
 [FileName,PathName,~] = uigetfile('*.*','MultiSelect','on');
+
 s1 = convertCharsToStrings(PathName);
 s2 = convertCharsToStrings(FileName);
 nFiles = length(s2);
@@ -345,6 +360,7 @@ if(~isempty(peaksLocationsInsideBrdrs))
     [~, maxPeakInd] = max(peakValsInsideBrdrs);
     bestPeak = peaksLocationsInsideBrdrs(maxPeakInd);
 end
+
 
 
 
